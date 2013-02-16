@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+	
+	<head>
+		<meta charset="utf-8">
+		<title>Bootstrap, from Twitter</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="description" content="">
+		<meta name="author" content="">
+		<!-- Le styles -->
+		<!-- TODO: make sure bootstrap.min.css points to BootTheme generated file
+		-->
+		<link href="bootstrap.css" rel="stylesheet" type="text/css" />
+		<style type="text/css">
+			html, body, #map {
+				margin: 0;
+				padding: 0;
+				height: 100%;
+			}
+
+			#map img {
+				max-width: none;
+			}
+		</style>
+	</head>
+	
+	<body>
+		<div class="navbar navbar-inverse navbar-fixed-top">
+			<div class="navbar-inner">
+				<div class="container">
+					<a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse"> <span class="icon-bar"></span>
+						<span class="icon-bar"></span>
+						<span class="icon-bar"></span>
+					</a>
+					<a class="brand" href="#" id="homeButton"><h1>Map Tile Selector</h1></a>
+					<a id="getDataButton" class="btn btn-primary btn-large" style="margin: 20px;" href="#" >Get Tile List</a>
+						<div class="btn-group" style="float: right; margin:25px;">
+							<button id="selectButton" type="submit" class="btn btn-primary">Select</button>
+							<button id="unselectButton" type="submit" class="btn">Unselect</button>
+							<button id="fillButton" type="submit" class="btn">Fill</button>
+						</div>
+					<!--/.nav-collapse -->
+				</div>
+			</div>
+		</div>
+		<div class="modal hide fade" id="welcome" style="height: 600px; width: 600px;">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+				<h3>&nbsp;</h3>
+			</div>
+			<div class="modal-body">
+				<div class="hero-unit">
+					 <h1>Welcome!</h1>
+
+					<p>This tool allows you to select some tiles via Google Maps. You need only to selecet the outer bounds. All tiles within will be selected automaticaly.</p>
+					<p>
+						<a id="startButton" class="btn btn-primary btn-large">Start Tile Selection &raquo;</a>
+					</p>
+				</div>
+			</div>
+		</div>
+		<div id="map">
+			
+		</div>
+		
+
+		<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+		<script src="bootstrap.js"></script>
+		<script src="http://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+		<script type="text/javascript">
+
+		var map;
+		var mode = "select";
+
+		$(document).ready(function(){
+
+			$("#homeButton").click(function(){
+				$("#welcome").modal("show");
+			});
+
+			$("#startButton").click(function(){
+				$("#welcome").modal("hide");
+			});
+
+			initMap();
+			
+			$("#welcome").modal();
+
+			$("#selectButton").click(function(){
+				$("#selectButton").addClass("btn-primary");
+				$("#unselectButton").removeClass("btn-primary");
+				$("#fillButton").removeClass("btn-primary");
+				mode = "select";
+			});
+
+			$("#unselectButton").click(function(){
+				$("#unselectButton").addClass("btn-primary");
+				$("#selectButton").removeClass("btn-primary");
+				$("#fillButton").removeClass("btn-primary");
+				mode = "unselect";
+			});
+
+			$("#fillButton").click(function(){
+				$("#unselectButton").removeClass("btn-primary");
+				$("#selectButton").removeClass("btn-primary");
+				$("#fillButton").addClass("btn-primary");
+				mode = "fill";
+			});
+
+			$("#getDataButton").click(function(){
+				createArray(selectedTiles);
+			});
+
+
+		});
+		
+		function initMap(){
+			var mapOptions = {
+				zoom: 17,
+				center: new google.maps.LatLng(32.694155, -16.770701),
+				mapTypeId: google.maps.MapTypeId.SATELLITE,
+				zoomControl: false, 
+				scrollwheel: false, 
+				disableDoubleClickZoom: true
+			};
+			map = new google.maps.Map(document.getElementById("map"), mapOptions);
+			setTimeout(function(){
+				$("#map").children().first().children().first().children().first().children().each(function(idx, elem){
+					if($(elem).css("z-index") == 0){
+
+						$(elem).on("click", function(event){
+							var img = event.target;
+							var url = $(img).attr("src");
+							var tilekey = getTilekeyfromURL(url);
+
+							if(mode === "select"){
+								$(img).css("opacity", "0.5");
+								selectTile(tilekey);
+							}else if(mode === "unselect"){
+								$(img).css("opacity", "1.0");
+								unselectTile(tilekey);
+							}else if(mode === "fill"){
+								fill(tilekey);
+							}
+						});
+
+						$(elem).on("mouseover", function(event){
+							var img = event.target;
+							$(img).css("opacity", "0.5");
+							$(img).data("hovered", true);
+						});
+
+						$(elem).on("mouseout", function(event){
+							var img = event.target;
+							var url = $(img).attr("src");
+							var tilekey = getTilekeyfromURL(url);
+
+							if(!isTileSelected(tilekey)){
+								$(img).css("opacity", "1.0");
+							}
+
+							$(img).data("hovered", false);
+						});
+
+						setInterval(function(){
+							$(elem).find("img").each(function(index, img){
+								var url = $(img).attr("src");
+								var tilekey = getTilekeyfromURL(url);
+								var hovered = $(img).data("hovered");
+
+								if(hovered || isTileSelected(tilekey)){
+									$(img).css("opacity", "0.5");
+								}else{
+									$(img).css("opacity", "1.0");
+								}
+							});
+						}, 100);
+						
+					}else{
+						$(elem).detach();
+					}
+				});
+			}, 3000);
+		}
+
+		var selectedTiles = {};
+
+		function selectTile(tilekey){
+			selectedTiles[JSON.stringify(tilekey)] = true;
+		}
+
+		function unselectTile(tilekey){
+			delete selectedTiles[JSON.stringify(tilekey)];
+		}
+		
+		function isTileSelected(tilekey){
+			return selectedTiles[JSON.stringify(tilekey)] === true;
+		}
+
+		function getTilekeyfromURL(url){
+			var params, param, tilekey;
+
+			if(url === "http://maps.gstatic.com/mapfiles/transparent.png"){
+				return;
+			}
+
+			tilekey = {};
+
+			// url = http://khm1.googleapis.com/kh?v=125&hl=de-DE&x=59431&y=52928&z=17&token=62647
+			url = url.split("?");
+			params = url[1];
+			params = params.split("&");
+
+			for(i in params){
+				param = params[i];
+				param = param.split("=");
+				key = param[0];
+				value = param[1];
+				
+				if(key === "x"){
+					tilekey.x = value;
+				}
+
+				if(key === "y"){
+					tilekey.y = value;
+				}
+
+				if(key === "z"){
+					tilekey.z = value;
+				}
+			}
+
+			return tilekey;
+		}
+
+		function fill(tilekey){
+			var a = createArray();
+
+		}
+
+		function createArray(){
+			var result = getArrayBounds(selectedTiles);
+
+			result.xOffset = result.xMin;
+			result.yOffset = result.yMin;
+
+			result.xSize = result.xMax - result.xMin + 1;
+			result.ySize = result.yMax - result.yMin + 1;
+
+			result.data = [];
+
+			for(var y = 0; y < ySize; y++){
+				result.data[y] = [];
+				for(var x = 0; x < xSize; x++){
+					result.data[y][x] = false;
+				}
+			}
+
+			for(i in selectedTiles){
+				var tilekey = JSON.parse(i);
+
+				result.data[tilekey.y - yOffset][tilekey.x - xOffset] = true;
+			}
+
+			return result;
+		}
+
+		function getArrayBounds(){
+			var xMin, xMax, yMin, yMax;
+
+			xMin = 999999999;
+			xMax = 0;
+			yMin = 999999999;
+			yMax = 0;
+
+			for(i in selectedTiles){
+				var tilekey = JSON.parse(i);
+				xMin = Math.min(xMin, tilekey.x);
+				xMax = Math.max(xMax, tilekey.x);
+				yMin = Math.min(yMin, tilekey.y);
+				yMax = Math.max(yMax, tilekey.y);
+			}
+
+			return {
+				xMin: xMin,
+				xMax: xMax,
+				yMin: yMin,
+				yMax: yMax
+			};
+		}
+		</script>
+	</body>
+
+</html>
