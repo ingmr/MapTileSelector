@@ -28,35 +28,42 @@
 		<div class="navbar navbar-inverse navbar-fixed-top">
 			<div class="navbar-inner">
 				<div class="container">
-					<a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse"> <span class="icon-bar"></span>
-						<span class="icon-bar"></span>
-						<span class="icon-bar"></span>
-					</a>
 					<a class="brand" href="#" id="homeButton"><h1>Map Tile Selector</h1></a>
 					<a id="getDataButton" class="btn btn-primary btn-large" style="margin: 20px;" href="#" >Get Tile List</a>
-						<div class="btn-group" style="float: right; margin:25px;">
-							<button id="selectButton" type="submit" class="btn btn-primary">Select</button>
-							<button id="unselectButton" type="submit" class="btn">Unselect</button>
-							<button id="fillButton" type="submit" class="btn">Fill</button>
-						</div>
-					<!--/.nav-collapse -->
+					<div class="btn-group" style="float: right; margin:25px;">
+						<button id="selectButton" type="submit" class="btn btn-primary">Select</button>
+						<button id="unselectButton" type="submit" class="btn">Unselect</button>
+						<button id="fillButton" type="submit" class="btn">Fill</button>
+					</div>
 				</div>
 			</div>
 		</div>
 		<div class="modal hide fade" id="welcome" style="height: 600px; width: 600px;">
 			<div class="modal-header">
 				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-				<h3>&nbsp;</h3>
+				<h3>Map Tile Selector</h3>
 			</div>
 			<div class="modal-body">
 				<div class="hero-unit">
-					 <h1>Welcome!</h1>
+					<h1>Welcome!</h1>
 
 					<p>This tool allows you to select some tiles via Google Maps. You need only to selecet the outer bounds. All tiles within will be selected automaticaly.</p>
 					<p>
 						<a id="startButton" class="btn btn-primary btn-large">Start Tile Selection &raquo;</a>
 					</p>
 				</div>
+			</div>
+		</div>
+		<div class="modal hide fade" id="data" style="height: 600px; width: 600px;">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+				<h3>Here is your data:</h3>
+			</div>
+			<div class="modal-body">
+				<textarea style="height: 380px; width: 555px"></textarea>
+			</div>
+			<div class="modal-footer">
+				<a data-dismiss="modal" class="btn btn-primary btn-large">Close</a>
 			</div>
 		</div>
 		<div id="map">
@@ -85,6 +92,7 @@
 			initMap();
 			
 			$("#welcome").modal();
+			$("#data").modal({show:false});
 
 			$("#selectButton").click(function(){
 				$("#selectButton").addClass("btn-primary");
@@ -108,7 +116,9 @@
 			});
 
 			$("#getDataButton").click(function(){
-				createArray(selectedTiles);
+				var data = getData();
+				$("#data").modal("show");
+				$("#data").find("textarea").text(data);
 			});
 
 
@@ -218,15 +228,15 @@
 				value = param[1];
 				
 				if(key === "x"){
-					tilekey.x = value;
+					tilekey.x = parseInt(value);
 				}
 
 				if(key === "y"){
-					tilekey.y = value;
+					tilekey.y = parseInt(value);
 				}
 
 				if(key === "z"){
-					tilekey.z = value;
+					tilekey.z = parseInt(value);
 				}
 			}
 
@@ -236,6 +246,17 @@
 		function fill(tilekey){
 			var a = createArray();
 
+			var x = tilekey.x - a.xOffset;
+			var y = tilekey.y - a.yOffset;
+
+			if(y < 0 || y >= a.data.length) return;
+			if(x < 0 || x >= a.data[y].length) return;
+
+			if(a.data[y][x]) return;
+
+			grow(a.data, x, y);
+
+			selectTiles(a, tilekey.z);
 		}
 
 		function createArray(){
@@ -249,9 +270,9 @@
 
 			result.data = [];
 
-			for(var y = 0; y < ySize; y++){
+			for(var y = 0; y < result.ySize; y++){
 				result.data[y] = [];
-				for(var x = 0; x < xSize; x++){
+				for(var x = 0; x < result.xSize; x++){
 					result.data[y][x] = false;
 				}
 			}
@@ -259,7 +280,7 @@
 			for(i in selectedTiles){
 				var tilekey = JSON.parse(i);
 
-				result.data[tilekey.y - yOffset][tilekey.x - xOffset] = true;
+				result.data[tilekey.y - result.yOffset][tilekey.x - result.xOffset] = true;
 			}
 
 			return result;
@@ -287,6 +308,52 @@
 				yMin: yMin,
 				yMax: yMax
 			};
+		}
+
+		function grow(a, x, y){
+			if(y < 0 || y >= a.length) return;
+			if(x < 0 || x >= a[y].length) return;
+			
+			a[y][x] = true;
+
+
+			if(!a[y    ][x + 1]) grow(a, x + 1, y);
+			if(!a[y    ][x - 1]) grow(a, x - 1, y);
+			
+			if(!a[y - 1][x - 1]) grow(a, x - 1, y - 1);
+			if(!a[y - 1][x    ]) grow(a, x, y - 1);
+			if(!a[y - 1][x + 1]) grow(a, x + 1, y - 1);
+
+			if(!a[y + 1][x - 1]) grow(a, x + 1, y + 1);
+			if(!a[y + 1][x    ]) grow(a, x, y + 1);
+			if(!a[y + 1][x + 1]) grow(a, x - 1, y + 1);
+
+		}
+
+		function selectTiles(a, z){
+			for(var y = 0; y < a.ySize; y++){
+				for(var x = 0; x < a.xSize; x++){
+					if(a.data[y][x]){
+						var tilekey = {
+							x: a.xOffset + x,
+							y: a.yOffset + y,
+							z: z
+						};
+						selectedTiles[JSON.stringify(tilekey)] = true;
+					}
+				}
+			}
+		}
+
+		function getData(){
+			var data = [];
+
+			for(var i in selectedTiles){
+				var tilekey = JSON.parse(i);
+				data.push(tilekey);
+			}
+
+			return JSON.stringify(data);
 		}
 		</script>
 	</body>
