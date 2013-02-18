@@ -75,6 +75,8 @@
 
 		var map;
 		var mode = "select";
+		var lod = 17;
+		var minLod = 11;
 
 		$(document).ready(function(){
 
@@ -115,7 +117,7 @@
 			$("#getDataButton").click(function(){
 				var data = getData();
 				$("#data").modal("show");
-				$("#data").find("textarea").text(data);
+				$("#data").find("textarea").text(JSON.stringify(data));
 			});
 
 
@@ -123,7 +125,7 @@
 		
 		function initMap(){
 			var mapOptions = {
-				zoom: 17,
+				zoom: lod,
 				center: new google.maps.LatLng(32.694155, -16.770701),
 				mapTypeId: google.maps.MapTypeId.SATELLITE,
 				zoomControl: false, 
@@ -246,10 +248,10 @@
 			var x = tilekey.x - a.xOffset;
 			var y = tilekey.y - a.yOffset;
 
-			if(y < 0 || y >= a.data.length) return;
-			if(x < 0 || x >= a.data[y].length) return;
+			if(x < 0 || x >= a.data.length) return;
+			if(y < 0 || y >= a.data[x].length) return;
 
-			if(a.data[y][x]) return;
+			if(a.data[x][y]) return;
 
 			grow(a.data, x, y);
 
@@ -267,17 +269,17 @@
 
 			result.data = [];
 
-			for(var y = 0; y < result.ySize; y++){
-				result.data[y] = [];
-				for(var x = 0; x < result.xSize; x++){
-					result.data[y][x] = false;
+			for(var x = 0; x < result.xSize; x++){
+				result.data[x] = [];
+				for(var y = 0; y < result.ySize; y++){
+					result.data[x][y] = false;
 				}
 			}
 
 			for(i in selectedTiles){
 				var tilekey = JSON.parse(i);
 
-				result.data[tilekey.y - result.yOffset][tilekey.x - result.xOffset] = true;
+				result.data[tilekey.x - result.xOffset][tilekey.y - result.yOffset] = true;
 			}
 
 			return result;
@@ -308,29 +310,29 @@
 		}
 
 		function grow(a, x, y){
-			if(y < 0 || y >= a.length) return;
-			if(x < 0 || x >= a[y].length) return;
+			if(x < 0 || x >= a.length) return;
+			if(y < 0 || y >= a[x].length) return;
 			
-			a[y][x] = true;
+			a[x][y] = true;
 
 
-			if(!a[y    ][x + 1]) grow(a, x + 1, y);
-			if(!a[y    ][x - 1]) grow(a, x - 1, y);
+			if(!a[x + 1][y    ]) grow(a, x + 1, y    );
+			if(!a[x - 1][y    ]) grow(a, x - 1, y    );
 			
-			if(!a[y - 1][x - 1]) grow(a, x - 1, y - 1);
-			if(!a[y - 1][x    ]) grow(a, x, y - 1);
-			if(!a[y - 1][x + 1]) grow(a, x + 1, y - 1);
+			if(!a[x - 1][y - 1]) grow(a, x - 1, y - 1);
+			if(!a[x    ][y - 1]) grow(a,     x, y - 1);
+			if(!a[x + 1][y - 1]) grow(a, x + 1, y - 1);
 
-			if(!a[y + 1][x - 1]) grow(a, x - 1, y + 1);
-			if(!a[y + 1][x    ]) grow(a, x, y + 1);
-			if(!a[y + 1][x + 1]) grow(a, x + 1, y + 1);
+			if(!a[x - 1][y + 1]) grow(a, x - 1, y + 1);
+			if(!a[x    ][y + 1]) grow(a,     x, y + 1);
+			if(!a[x + 1][y + 1]) grow(a, x + 1, y + 1);
 
 		}
 
 		function selectTiles(a, z){
-			for(var y = 0; y < a.ySize; y++){
-				for(var x = 0; x < a.xSize; x++){
-					if(a.data[y][x]){
+			for(var x = 0; x < a.xSize; x++){
+				for(var y = 0; y < a.ySize; y++){
+					if(a.data[x][y]){
 						var tilekey = {
 							x: a.xOffset + x,
 							y: a.yOffset + y,
@@ -343,15 +345,85 @@
 		}
 
 		function getData(){
-			var data = [];
+			var lodKey = "LOD" + lod;
+			var data = createArray();
 
-			for(var i in selectedTiles){
-				var tilekey = JSON.parse(i);
-				data.push(tilekey);
+			alignLod(data, lod, minLod);
+			
+			return data;
+		}
+
+		function alignLod(lodInfo, sourceLod, targetLod){
+			var align = Math.pow(2, sourceLod - targetLod);
+
+			var shift = lodInfo.xMin % align;
+			if(shift !== 0){
+				lodInfo.xMin -= shift;
+
+				for(var i = 0; i < shift; i++){
+					var tmp = [];
+					for(var y = 0; y < lodInfo.ySize; y++){
+						tmp.push(false);
+					}
+					lodInfo.data.unshift(tmp);
+				}
 			}
 
-			return JSON.stringify(data);
+			var shift =  align - (lodInfo.xMax % align) - 1;
+			if(shift !== 0){
+				lodInfo.xMax += shift;
+
+				for(var i = 0; i < shift; i++){
+					var tmp = [];
+					for(var y = 0; y < lodInfo.ySize; y++){
+						tmp.push(false);
+					}
+					lodInfo.data.push(tmp);
+				}
+			}
+
+			lodInfo.xOffset = lodInfo.xMin;
+			lodInfo.xSize = lodInfo.xMax - lodInfo.xMin + 1;
+
+			var shift = lodInfo.yMin % align;
+			if(shift !== 0){
+				lodInfo.yMin -= shift;
+
+				for(var i = 0; i < shift; i++){
+					for(var x = 0; x < lodInfo.xSize; x++){
+						lodInfo.data[x].unshift(false);
+					}
+				}
+			}
+
+			var shift = align - (lodInfo.yMax % align) - 1;
+			if(shift !== 0){
+				lodInfo.yMax += shift;
+
+				for(var i = 0; i < shift; i++){
+					for(var x = 0; x < lodInfo.xSize; x++){
+						lodInfo.data[x].push(false);
+					}
+				}
+			}
+
+			lodInfo.yOffset = lodInfo.yMin;
+			lodInfo.ySize = lodInfo.yMax - lodInfo.yMin + 1;
 		}
+
+		/*function buildLod(data, lod){
+			var baseLodKey = "LOD" + (lod - 1);
+			var buildLodKey = "LOD" + lod;
+
+			var baseLevel = data[baseLodKey];
+			var buildLevel = data[buildLodKey] = {
+				xMin: Math.floor(baseLevel.xOffset / 2),
+				xMax:
+				xOffset: Math.floor(baseLevel.xOffset / 2),
+				xSize: Math.ceil((baseLevel.xOffset + baseLevel.xOffset) / 2) - Math.flor(baseLevel.xOffset / 2),
+			};
+		}*/
+
 		</script>
 	</body>
 
