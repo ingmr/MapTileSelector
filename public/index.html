@@ -26,7 +26,7 @@
 			<div class="navbar-inner">
 				<div class="container">
 					<a class="brand" href="#" id="homeButton"><h1>Map Tile Selector</h1></a>
-					<a id="getDataButton" class="btn btn-primary btn-large" style="margin: 20px;" href="#" >Get Tile List</a>
+					<a id="downloadButton" class="btn btn-primary btn-large" style="margin: 20px;" href="#" >Download ...</a>
 					<div class="btn-group" style="float: right; margin:25px;">
 						<button id="selectButton" type="submit" class="btn btn-primary">Select</button>
 						<button id="unselectButton" type="submit" class="btn">Unselect</button>
@@ -51,16 +51,30 @@
 				</div>
 			</div>
 		</div>
-		<div class="modal hide fade" id="data" style="height: 600px; width: 600px;">
+		<div class="modal hide fade" id="data" style="width: 600px;">
 			<div class="modal-header">
 				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-				<h3>Here is your data:</h3>
+				<h3>Download ...</h3>
 			</div>
 			<div class="modal-body">
-				<textarea style="height: 380px; width: 555px"></textarea>
+				<p>
+					<strong>Number of Tiles:</strong> <span id="numTiles"></span><br>
+					<br>
+					<strong>Width:</strong> <span id="xSize"></span><br>
+					<strong>Height:</strong> <span id="ySize"></span><br>
+					<br>
+					<strong>Minimum X:</strong> <span id="xMin"></span><br>
+					<strong>Maximum X:</strong> <span id="xMax"></span><br>
+					<strong>Minimum Y:</strong> <span id="yMin"></span><br>
+					<strong>Maximum Y:</strong> <span id="yMax"></span><br>
+				</p>
+				<div class="progress progress-striped active">
+					<div id="progress" class="bar" style="width: 0%;"></div>
+				</div>
+				<p id="status"></p>
 			</div>
 			<div class="modal-footer">
-				<a data-dismiss="modal" class="btn btn-primary btn-large">Close</a>
+				<a id="startDownloadButton" class="btn btn-primary btn-large">Start Download</a>
 			</div>
 		</div>
 		<div id="map">
@@ -114,13 +128,64 @@
 				mode = "fill";
 			});
 
-			$("#getDataButton").click(function(){
-				var data = getData();
+			var data;
+			$("#downloadButton").click(function(){
+
 				$("#data").modal("show");
-				$("#data").find("textarea").text(JSON.stringify(data));
+				
+				data = getData();
+
+				$("#numTiles").text(data.numTiles);
+
+				if(data.numTiles <= 0){
+					$("#xMin").text("N/A");
+					$("#xMax").text("N/A");
+					$("#xSize").text("N/A");
+
+					$("#yMin").text("N/A");
+					$("#yMax").text("N/A");
+					$("#ySize").text("N/A");
+
+					$("#startDownloadButton").addClass("disabled");
+					$("#startDownloadButton").attr("disabled", "disabled");
+				}else{
+					$("#xMin").text(data.xMin);
+					$("#xMax").text(data.xMax);
+					$("#xSize").text(data.xSize);
+
+					$("#yMin").text(data.yMin);
+					$("#yMax").text(data.yMax);
+					$("#ySize").text(data.ySize);
+
+					$("#startDownloadButton").removeClass("disabled");
+					$("#startDownloadButton").attr("disabled", null);
+				}
+
+				$("#progress").css("width", "0%");
+				$("#status").text("");
 			});
 
+			$("#startDownloadButton").click(function(){
+				var postData = {"data": JSON.stringify(data)};
+				$.post("/api/startDownload", postData, function(){
+					setTimeout(updateStatus, 500);
+				});
 
+				function updateStatus(){
+					$.get("/api/status", function(status){
+						var message = status.task + " (" + status.numTilesToDownload +  ")"
+
+						$("#progress").css("width", Math.floor(status.percent) + "%");
+						$("#status").text(message);
+
+						if(status.percent === 100){
+							$("#data").modal("hide");
+						}else{
+							setTimeout(updateStatus, 500);
+						}
+					});
+				}
+			});
 		});
 		
 		function initMap(){
@@ -267,7 +332,10 @@
 			result.xSize = result.xMax - result.xMin + 1;
 			result.ySize = result.yMax - result.yMin + 1;
 
+			result.numTiles = Object.keys(selectedTiles).length;
+
 			result.data = [];
+			result.lod = lod;
 
 			for(var x = 0; x < result.xSize; x++){
 				result.data[x] = [];
@@ -345,7 +413,6 @@
 		}
 
 		function getData(){
-			var lodKey = "LOD" + lod;
 			var data = createArray();
 
 			alignLod(data, lod, minLod);
@@ -410,19 +477,6 @@
 			lodInfo.yOffset = lodInfo.yMin;
 			lodInfo.ySize = lodInfo.yMax - lodInfo.yMin + 1;
 		}
-
-		/*function buildLod(data, lod){
-			var baseLodKey = "LOD" + (lod - 1);
-			var buildLodKey = "LOD" + lod;
-
-			var baseLevel = data[baseLodKey];
-			var buildLevel = data[buildLodKey] = {
-				xMin: Math.floor(baseLevel.xOffset / 2),
-				xMax:
-				xOffset: Math.floor(baseLevel.xOffset / 2),
-				xSize: Math.ceil((baseLevel.xOffset + baseLevel.xOffset) / 2) - Math.flor(baseLevel.xOffset / 2),
-			};
-		}*/
 
 		</script>
 	</body>
